@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "proser-studio-dashboard",
+  "account_id": "77b88919e0db9c7f85a3dd97a398aa05",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-14",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "app.proser.studio",
+      "custom_domain": true
+    },
+    {
+      "pattern": "api.proser.studio",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash"
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://app.proser.studio",
+    "RAILS_ORIGIN": "https://proser.wassano.com",
+    "API_ORIGIN": "https://api.proser.studio"
+  },
+  "secrets": {
+    "required": [
+      "ORIGIN_TOKEN"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    },
+    "head_sampling_rate": 1
+  }
+}

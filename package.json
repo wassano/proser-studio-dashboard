@@ -1,0 +1,22 @@
+{
+  "name": "proser-studio-dashboard-edge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "types": "wrangler types",
+    "check": "tsc --noEmit -p worker/tsconfig.json && node --experimental-strip-types --test worker/test/*.test.ts",
+    "dev:worker": "wrangler dev",
+    "deploy": "node worker/preflight.mjs && npm run build && wrangler deploy",
+    "deploy:dry-run": "npm run build && wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.131.2",
+    "typescript": "^5.9.3",
+    "@types/node": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

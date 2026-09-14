@@ -1,0 +1,10 @@
+export const featureNames: Record<string, string> = { lighting: 'Iluminação DMX', audio: 'Áudio', video: 'Vídeo e documentos', scenes: 'Cenas', rdm: 'Descoberta RDM', effects: 'Efeitos de luz', video_capture: 'Captura de telas e janelas', powerpoint: 'PowerPoint com animações' };
+export const limitNames: Record<string, string> = { fixtures: 'Refletores', audios: 'Áudios', videos: 'Vídeos, imagens e documentos', scenes: 'Cenas' };
+export const maximums: Record<string, number> = { fixtures: 170, audios: 256, videos: 512, scenes: 128 };
+export const statusNames: Record<string, string> = { active: 'Ativa', pending: 'Aguardando liberação', revoked: 'Revogada', rejected: 'Recusada', blocked: 'Bloqueada', suspended: 'Suspensa', upgrade_required: 'Atualização necessária', draft: 'Rascunho', published: 'Publicada', withdrawn: 'Retirada' };
+export type Plan = { id: number; name: string; features: Record<string, boolean>; limits: Record<string, number>; offline_hours: number };
+export type License = { id: number; name: string; status: string; plan_id: number; plan_name: string; max_devices: number; active_devices: number; expires_at: string | null; minimum_version: string; channel: string; feature_overrides: Record<string, boolean>; limit_overrides: Record<string, number> };
+export type Installation = { id: number; device_id: string; computer_name: string; os: string; arch: string; target: string; app_version: string; status: string; access_status: string; activated_at: string | null; last_seen_at: string | null; last_ip: string | null; location: string | null; created_at: string; license: License | null };
+export type Release = { id: number; version: string; target: string; channel: string; notes: string; status: string; published_at: string | null; release_assets: { id: number; filename: string; size: number; sha256: string }[] };
+export type Settings = { installation_limit: number; registration_enabled: boolean; plan_id: number; active_installations: number };
+export type Page<T> = { items: T[]; total: number; page: number };

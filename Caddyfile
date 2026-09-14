@@ -1,0 +1,23 @@
+{$ORIGIN_HOST:app.proser.studio} {
+	encode zstd gzip
+	@devices path /api/v1/installations/*
+	@uploads path /api/admin/releases/*/upload /api/admin/releases/*/uploads/*
+	@regular not path /api/admin/releases/*/upload /api/admin/releases/*/uploads/*
+	request_body @devices {
+		max_size 16KB
+	}
+	request_body @regular {
+		max_size 64KB
+	}
+	request_body @uploads {
+		max_size 2148532224
+	}
+	forward_auth @uploads web:3000 {
+		uri /api/session
+	}
+	reverse_proxy web:3000 {
+		transport http {
+			response_header_timeout 600s
+		}
+	}
+}

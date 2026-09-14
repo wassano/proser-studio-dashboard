@@ -1,0 +1,2 @@
+class RequestNonce < ApplicationRecord
+end

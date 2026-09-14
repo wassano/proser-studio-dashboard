@@ -1,0 +1,71 @@
+name: proser-studio-dashboard
+services:
+  web:
+    build: .
+    image: proser-studio-dashboard:local
+    container_name: proser-studio-dashboard
+    expose: ["3000"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [backend, edge]
+    secrets: [license_private_key]
+    volumes:
+      - ./geoip:/rails/geoip:ro
+      - temporary:/rails/tmp
+    read_only: true
+    tmpfs:
+      - /rails/log:uid=10001,gid=10001,mode=0700,size=64m
+      - /tmp:uid=10001,gid=10001,mode=0700,size=64m
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 256
+    mem_limit: 512m
+    healthcheck:
+      test: [CMD, curl, -fsS, -H, "Host: api.proser.studio", "http://localhost:3000/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: proser
+      POSTGRES_DB: proser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bin/setup-secrets}
+    volumes: [postgres:/var/lib/postgresql/data]
+    networks: [backend]
+    mem_limit: 384m
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U proser -d proser"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt: [no-new-privileges:true]
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes", --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    volumes: [redis:/data]
+    networks: [backend]
+    mem_limit: 192m
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt: [no-new-privileges:true]
+networks:
+  backend: { internal: true }
+  edge:
+    ipam:
+      config: [{ subnet: 172.30.80.0/28 }]
+volumes:
+  postgres:
+  redis:
+  temporary:
+secrets:
+  license_private_key:
+    file: ./secrets/license-private.pem
