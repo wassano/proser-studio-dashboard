@@ -5,7 +5,7 @@ Painel React + Rails 8.1 para instalações, licenças, planos e versões. Postg
 ## Comportamento inicial
 
 - Administrador autorizado: **dwassano@gmail.com**.
-- Painel: **https://app.proser.studio**. API pública: **https://api.proser.studio**. Origem Cosmos: **https://proser.wassano.com**. Appwrite: **https://appwrite.wassano.com/v1**.
+- Painel: **https://app.proser.studio**. API pública: **https://api.proser.studio**. Hospedagem direta no Cosmos, sem Worker. Appwrite: **https://appwrite.wassano.com/v1**.
 - **20 instalações liberadas**, limite global editável em **Instalações → Admissão**.
 - A primeira abertura do Proser registra o computador automaticamente. Havendo vaga, recebe uma licença Studio sem vencimento cadastrado. A licença pode depois receber prazo, suspensão, revogação ou outro plano pelo painel.
 - Sem conexão no primeiro registro, com registro recusado ou com limite geral atingido, o aplicativo fica bloqueado. Registros excedentes ficam pendentes: libere-os no painel após aumentar o limite ou revogar outra instalação. Pausar a admissão não revoga instalações existentes.
@@ -42,13 +42,15 @@ O Google Client Secret fica no Appwrite. As chaves de serviço do Appwrite ficam
 
 O fluxo SSR do Appwrite usa `createOAuth2Token` → `createSession`. Como esse fluxo não garante o provedor no objeto da sessão, o Rails consulta a identidade Google vinculada e valida seu token diretamente no endpoint UserInfo do Google, exigindo e-mail verificado, identidade correspondente e allowlist.
 
-## Publicação com Cloudflare Worker
+## Painel e API no Cosmos
 
-O Worker publicado serve o React em **app.proser.studio** e encaminha `/api`, `/auth` e `/up` de **api.proser.studio** ao Rails em **proser.wassano.com**. O frontend usa CORS com credenciais e o cookie administrativo permanece restrito ao host da API. Consulte [CLOUDFLARE.md](CLOUDFLARE.md) para configurar a origem, proteção do backend e publicação. Rails, PostgreSQL, Redis e Appwrite continuam no servidor externo.
+O Cosmos serve React e Rails em **app.proser.studio**. Login e uploads administrativos usam essa mesma origem, com cookie Secure/HttpOnly restrito ao host e CSRF obrigatório. **api.proser.studio** permanece como endpoint dos instaladores e atualizações. Os dois domínios apontam diretamente para `157.173.111.33`, com TLS no Cosmos. A Cloudflare fornece DNS; o Worker foi aposentado. Consulte [COSMOS.md](COSMOS.md) para implantar e renovar certificados.
 
 ## Publicar o backend self-hosted
 
 O Compose é preparado para **Cosmos Cloud**, sem qualquer porta publicada no host. O container `proser-studio-dashboard` atende HTTP na porta interna **3000**. PostgreSQL e Redis ficam em uma rede Docker interna. Consulte [COSMOS.md](COSMOS.md) para os comandos de instalação e criação da rota.
+
+O GitHub Actions testa PRs e faz deploy por SSH ao receber push na `main`, como o Report7 no mesmo servidor. Configure `SSH_PRIVATE_KEY` e `SSH_KNOWN_HOSTS` no repositório do painel; servidor, usuário e diretório têm os padrões da instalação atual. O deploy cria backup do banco, aplica migrations, troca somente a aplicação e verifica saúde/HTTPS, com restauração da imagem anterior em caso de falha. Veja a [configuração e operação do CI](COSMOS.md#ci-de-deploy).
 
 1. Execute `ruby bin/setup-secrets` para criar `.env` e o par Ed25519. O comando não sobrescreve arquivos existentes nem exibe segredos.
 2. Configure as chaves Appwrite em `.env`. A instância existente usa `https://appwrite.wassano.com/v1`, projeto `proser`.
@@ -64,7 +66,7 @@ docker compose run --rm web bundle exec rails proser:provision_storage
 docker compose up -d web
 ```
 
-O Cosmos termina HTTPS. Quando usado com o Worker, use a rota de origem `proser.wassano.com`, diferente dos hosts públicos do Worker; o Worker autentica o encaminhamento com `WORKER_ORIGIN_TOKEN`. Pedidos diretos sem o segredo recebem 403. Rails recusa iniciar com configuração de produção incompleta. O processo roda sem root, sem capabilities e com filesystem somente leitura, exceto temporários.
+O Cosmos termina HTTPS e encaminha os dois hosts à porta interna 3000. Deixe `WORKER_ORIGIN_TOKEN` vazio e `VITE_API_ORIGIN` ausente; o React usa sua própria origem. O Rails aceita apenas os hosts configurados, confia no IP do gateway Docker do Cosmos (`172.30.80.1/32`) e recusa iniciar com configuração de produção incompleta. O processo roda sem root, sem capabilities e com filesystem somente leitura, exceto temporários.
 
 Programe `docker compose run --rm web bundle exec rails proser:prune` periodicamente para remover nonces, sessões e grants expirados. Auditoria é retida por 180 dias por padrão (`AUDIT_RETENTION_DAYS`). Faça backup do PostgreSQL, uploads Appwrite e chaves; valide a restauração. Não inclua chaves privadas em imagens, Git, frontend ou instaladores.
 
@@ -87,6 +89,25 @@ Para rotação, `PROSER_LICENSE_KEYS_PATH` aceita um JSON com pares `kid: PEM p�
 - Windows 7: `npm run dist:win7`. A edição continua em Electron 22; possui licença assinada e fuses compatíveis, mas **não dispõe da integridade ASAR moderna no Windows**. Isso é uma limitação da plataforma, não uma proteção equivalente à edição atual.
 
 Não são gerados source maps no build normal; mesmo quando ativados para diagnóstico com `PROSER_DEV_SOURCEMAPS=1`, são excluídos do pacote. Os fuses desabilitam RunAsNode, NODE_OPTIONS e depuração por argumentos e restringem o carregamento ao ASAR. Integridade ASAR é habilitada nos builds atuais.
+
+## Download público e integração com o CI
+
+`/downloads` oferece, sem login, a última versão estável publicada por plataforma. A API `GET /api/v1/releases` retorna os links e hashes dos instaladores. Links `/api/v1/releases/:release_id/files/:id/:filename` funcionam apenas enquanto a versão estiver publicada; o bucket permanece privado. A aba **Versões** permite baixar arquivos e copiar os links públicos. Publicação de beta gera links diretos, mas não aparece na lista pública estável.
+
+Configure `RELEASE_CI_TOKEN` no `.env` do Rails e o mesmo segredo como `PROSER_RELEASE_CI_TOKEN` no GitHub do desktop. Exige 64 caracteres hexadecimais aleatórios; não use chaves do Appwrite, tokens de administrador nem a chave de assinatura de licenças. A integração fica desabilitada enquanto esse segredo estiver vazio. Rode `bin/rails db:migrate` e compile o frontend antes de ativar o envio do CI.
+
+O workflow do desktop registra as quatro plataformas após gerar uma tag de versão ou executar o dispatch na branch padrão. A API de CI permite cadastrar/retomar rascunhos e enviar arquivos em partes de 5 MiB; não permite publicar. O cadastro exige um manifesto de nomes, tamanhos e SHA-256, além do link da execução no GitHub. macOS precisa de DMG e ZIP; Windows precisa de EXE. A publicação fica bloqueada até a conclusão e verificação de todos os arquivos. O painel registra essas ações com ator `github-actions`.
+
+Endpoints de CI, todos com `Authorization: Bearer <RELEASE_CI_TOKEN>`:
+
+- `POST /api/ci/releases`: recebe `release` com `version`, `target`, `channel`, `notes`, `ci_run_url` e `assets: [{filename, size, sha256}]`; devolve o rascunho e arquivos já recebidos.
+- `POST /api/ci/releases/:release_id/uploads`: recebe `upload: {filename, total_bytes}`; devolve `id`, `chunk_size` e `received_bytes` para retomada.
+- `PUT /api/ci/releases/:release_id/uploads/:id`: corpo binário e cabeçalho `X-Upload-Offset`.
+- `POST /api/ci/releases/:release_id/uploads/:id/complete`: calcula hashes e armazena o arquivo privado no Appwrite.
+- `POST /api/ci/releases/:id/complete`: confere o manifesto completo e torna o rascunho pronto para **Publicar** manualmente.
+- `DELETE /api/ci/releases/:release_id/uploads/:id`: cancela um envio temporário.
+
+O servidor recusa mudanças nos arquivos de uma versão existente. Para repetir um envio interrompido, execute novamente o job `register` usando os mesmos artifacts. Para uma nova compilação com bytes diferentes, incremente a versão. O servidor gera os metadados `latest.yml`/`latest-mac.yml` das atualizações autorizadas a partir dos arquivos verificados.
 
 ## Distribuir atualizações
 
@@ -113,7 +134,7 @@ Reduzir um limite não apaga projetos. Um projeto acima do limite pode ser reduz
 - Requisições dos dispositivos: Ed25519, hash do corpo, método/caminho, nonce de uso único e tolerância de relógio de 5 minutos. Índice único no PostgreSQL impede replay entre workers.
 - Autorizações: assinadas, vinculadas ao dispositivo e à consulta; validade limitada; chave privada só no servidor; decisões de recusa persistidas; cache protegido por `safeStorage` sem fallback em texto puro; detecção de retrocesso de relógio.
 - Administração: Google com allowlist e verificação de identidade, OAuth state de uso único, cookie seguro/HTTP-only/SameSite, CSRF e origem, sessão revogável de 8 horas com inatividade máxima de 1 hora.
-- Infra/API: HTTPS, HSTS, CSP, proteção de framing, no-store, parâmetros permitidos, limites de requisição, rate limiting compartilhado em Redis, publicação atômica, downloads autenticados e registro de ações administrativas.
+- Infra/API: HTTPS, HSTS, CSP, proteção de framing, no-store, parâmetros permitidos, limites de requisição, rate limiting compartilhado em Redis, publicação atômica, atualizações autenticadas, downloads públicos apenas de versões publicadas e registro de ações administrativas.
 - Atributos como nome do PC, versão e SO são informados pelo cliente e não constituem atestação de hardware. Reinstalar após apagar a identidade cria outro pedido e consome outra vaga. Administrador/root local ainda pode modificar um binário, restaurar snapshots ou extrair dados de sua própria sessão: o código entregue ao computador não fica impossível de adulterar.
 - Autorizações já emitidas offline não podem ser revogadas instantaneamente. Não há promessa de “todos os controles possíveis” ou proteção absoluta contra engenharia reversa. O backend controla suas próprias APIs; os controles locais elevam a dificuldade e reduzem bypasses triviais.
 

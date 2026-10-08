@@ -90,7 +90,8 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   if (url.host === publicOrigin.host || (local && !dynamic)) {
     if (!['GET', 'HEAD'].includes(request.method)) return error(405, 'Método não permitido.');
     if (dynamic) return secured(Response.redirect(`${apiOrigin.origin}${url.pathname}${url.search}`, 308));
-    return secured(await env.ASSETS.fetch(request), false, apiOrigin.origin);
+    const assetRequest = /^\/downloads\/?$/.test(url.pathname) ? new Request(new URL('/index.html', request.url), request) : request;
+    return secured(await env.ASSETS.fetch(assetRequest), false, apiOrigin.origin);
   }
   const finish = (response: Response) => cors(secured(response, true, apiOrigin.origin), request, publicOrigin.origin);
   const browserOrigin = request.headers.get('Origin');
@@ -104,11 +105,14 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   }
   try { configuration(env); } catch { return finish(error(503, 'O servidor do painel ainda não foi conectado.')); }
   if (!methods.includes(request.method)) return finish(error(405, 'Método não permitido.'));
+  const ci = /^\/api\/ci\/releases(?:\/|$)/.test(url.pathname);
+  if (ci && (browserOrigin || !/^Bearer [a-f0-9]{64}$/.test(request.headers.get('Authorization') ?? ''))) return finish(error(403, 'Credencial de CI inválida.'));
+  const ciUpload = /^\/api\/ci\/releases\/\d+\/uploads(?:\/[^/]+(?:\/complete)?)?$/.test(url.pathname);
   const upload = /^\/api\/admin\/releases\/\d+\/(?:upload|uploads(?:\/[^/]+(?:\/complete)?)?)$/.test(url.pathname);
-  const maxBytes = upload ? 6 * 1024 * 1024 : url.pathname.startsWith('/api/v1/installations/') ? 16384 : 65536;
+  const maxBytes = upload || ciUpload ? 6 * 1024 * 1024 : url.pathname.startsWith('/api/v1/installations/') ? 16384 : 65536;
   const length = request.headers.get('Content-Length');
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) return finish(error(413, 'Requisição excede o limite permitido.'));
-  if (!['GET', 'HEAD'].includes(request.method) && !url.pathname.startsWith('/api/v1/')) {
+  if (!['GET', 'HEAD'].includes(request.method) && !url.pathname.startsWith('/api/v1/') && !ci) {
     if (browserOrigin !== publicOrigin.origin || !request.headers.get('X-CSRF-Token')) return finish(error(403, 'Origem ou token CSRF inválido.'));
   }
   try {

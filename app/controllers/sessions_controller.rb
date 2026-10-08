@@ -10,7 +10,8 @@ class SessionsController < ApplicationController
     state = SecureRandom.hex(32)
     session[:oauth_state] = state
     session[:oauth_started_at] = Time.current.to_i
-    origin = ENV.fetch("API_URL", ENV.fetch("DASHBOARD_URL", "http://localhost:3000"))
+    # The OAuth state and admin cookie belong to the dashboard host.
+    origin = ENV.fetch("DASHBOARD_URL", "http://localhost:3000")
     redirect_to AppwriteClient.new.oauth_url(success: "#{origin}/auth/callback?state=#{state}", failure: "#{origin}/auth/failure"), allow_other_host: true
   end
   def callback

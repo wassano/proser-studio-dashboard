@@ -1,4 +1,5 @@
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? (import.meta.env.PROD ? 'https://api.proser.studio' : '');
+// Cosmos serves the dashboard and its authenticated API on the same origin.
+const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? '';
 export function apiUrl(path: string): string {
   if (!/^\/(api|auth)(\/|$)/.test(path) || path.includes('\\')) throw new Error('Rota de API inválida.');
   return `${apiOrigin}${path}`;

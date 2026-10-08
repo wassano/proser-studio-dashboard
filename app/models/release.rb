@@ -5,6 +5,11 @@ class Release < ApplicationRecord
   validates :channel, inclusion: { in: %w[stable beta] }
   validates :status, inclusion: { in: %w[draft published withdrawn] }
   validates :notes, length: { maximum: 10000 }
+  def ci_managed? = ci_expected_assets.present?
+  def verify_ci_assets!
+    actual = release_assets.map { |a| { "filename" => a.filename, "size" => a.size, "sha256" => a.sha256 } }.sort_by { |a| a["filename"] }
+    raise Policy::Denied, "Arquivos do CI incompletos ou divergentes" unless ci_managed? && actual == ci_expected_assets.sort_by { |a| a["filename"] }
+  end
   def update_asset
     extension = target.start_with?("mac-") ? ".zip" : ".exe"
     release_assets.find { |asset| File.extname(asset.filename) == extension }
@@ -12,6 +17,10 @@ class Release < ApplicationRecord
   def publish!
     with_lock do
       raise Policy::Denied, "A versão deve estar em rascunho" unless status == "draft"
+      if ci_managed?
+        raise Policy::Denied, "Aguarde a conclusão do envio pelo CI" unless ci_ready
+        verify_ci_assets!
+      end
       expected = target.start_with?("mac-") ? ".zip" : ".exe"
       raise Policy::Denied, "Envie exatamente um instalador #{expected}" unless release_assets.count { |a| File.extname(a.filename) == expected } == 1
       previous = self.class.where(target: target, channel: channel).where.not(published_at: nil).where.not(id: id).pluck(:version)

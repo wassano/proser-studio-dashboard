@@ -5,6 +5,6 @@ export const statusNames: Record<string, string> = { active: 'Ativa', pending: '
 export type Plan = { id: number; name: string; features: Record<string, boolean>; limits: Record<string, number>; offline_hours: number };
 export type License = { id: number; name: string; status: string; plan_id: number; plan_name: string; max_devices: number; active_devices: number; expires_at: string | null; minimum_version: string; channel: string; feature_overrides: Record<string, boolean>; limit_overrides: Record<string, number> };
 export type Installation = { id: number; device_id: string; computer_name: string; os: string; arch: string; target: string; app_version: string; status: string; access_status: string; activated_at: string | null; last_seen_at: string | null; last_ip: string | null; location: string | null; created_at: string; license: License | null };
-export type Release = { id: number; version: string; target: string; channel: string; notes: string; status: string; published_at: string | null; release_assets: { id: number; filename: string; size: number; sha256: string }[] };
+export type Release = { id: number; version: string; target: string; channel: string; notes: string; status: string; published_at: string | null; ci_run_url?: string | null; ci_ready?: boolean; release_assets: { id: number; filename: string; size: number; sha256: string }[] };
 export type Settings = { installation_limit: number; registration_enabled: boolean; plan_id: number; active_installations: number };
 export type Page<T> = { items: T[]; total: number; page: number };

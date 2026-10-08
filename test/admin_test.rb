@@ -71,14 +71,14 @@ class AdminTest < ActionDispatch::IntegrationTest
     assert_equal previous, second.reload.license
     assert_equal 2, Installation.where(status: "active").count
   end
-  test "separate API origin preserves OAuth state and requires CSRF from the exact dashboard" do
+  test "dashboard keeps OAuth on its own origin while devices use the separate API" do
     ENV["DASHBOARD_URL"] = "https://app.proser.studio"
     ENV["API_URL"] = "https://api.proser.studio"
-    host! "api.proser.studio"
+    host! "app.proser.studio"
     https!
     get "/auth/google"
     success = URI.decode_www_form(URI(response.location).query).to_h.fetch("success")
-    assert_equal "api.proser.studio", URI(success).host
+    assert_equal "app.proser.studio", URI(success).host
     assert_equal "/auth/callback", URI(success).path
     login
     assert_response :success
