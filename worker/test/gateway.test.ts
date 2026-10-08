@@ -89,3 +89,35 @@ test('frontend and API hosts stay separate and CSP permits the API', async () =>
   assert.equal(moved.status, 308);
   assert.equal(moved.headers.get('Location'), env.API_ORIGIN + '/auth/google');
 });
+
+test('CI uploads accept bearer authentication without a browser session or CSRF', async t => {
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (outgoing: Request) => {
+    calls.push(outgoing.url);
+    assert.equal(outgoing.headers.get('Authorization'), `Bearer ${'b'.repeat(64)}`);
+    assert.equal(await outgoing.text(), 'MZinstaller');
+    return Response.json({ received_bytes: 11 });
+  });
+  const response = await handle(request('/api/ci/releases/1/uploads/abc', { method: 'PUT', body: 'MZinstaller', headers: { Authorization: `Bearer ${'b'.repeat(64)}`, 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': '0' } }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [`${origin}/api/ci/releases/1/uploads/abc`]);
+});
+test('CI rejects browser-origin requests, missing tokens and oversized chunks before Rails', async t => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('No backend expected'); });
+  const path = '/api/ci/releases/1/uploads/abc';
+  assert.equal((await handle(request(path, { method: 'PUT', body: 'bytes' }), env)).status, 403);
+  assert.equal((await handle(request(path, { method: 'PUT', body: 'bytes', headers: { Origin: env.PUBLIC_ORIGIN, Authorization: `Bearer ${'b'.repeat(64)}` } }), env)).status, 403);
+  assert.equal((await handle(request(path, { method: 'PUT', headers: { Authorization: `Bearer ${'b'.repeat(64)}`, 'Content-Length': String(7 * 1024 * 1024) } }), env)).status, 413);
+  assert.equal(fetch.mock.callCount(), 0);
+});
+test('public downloads route serves the SPA entry without contacting Rails', async t => {
+  const assets = { fetch: async (request: Request) => {
+    assert.equal(new URL(request.url).pathname, '/index.html');
+    return new Response('<html>downloads</html>');
+  } };
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('No backend expected'); });
+  const response = await handle(new Request(env.PUBLIC_ORIGIN + '/downloads'), { ...env, ASSETS: assets });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), '<html>downloads</html>');
+  assert.equal(fetch.mock.callCount(), 0);
+});

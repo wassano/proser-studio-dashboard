@@ -11,9 +11,15 @@ frontend/node_modules
 public
 appwrite
 test
+*.sql
+*.sql.gz
+backups
 
 node_modules
 .wrangler
 .dev.vars*
 worker
 worker-configuration.d.ts
+.deploy
+.github
+scripts/test-deploy.mjs

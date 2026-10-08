@@ -25,3 +25,4 @@ frontend/test-results/
 frontend/playwright-report/
 geoip/*.mmdb
 .DS_Store
+.deploy/

@@ -1,5 +1,7 @@
 # Dashboard e API na Cloudflare
 
+> Histórico da implantação inicial, substituída pelo acesso direto ao Cosmos em 14/09/2026. Não use os comandos de publicação do Worker abaixo na implantação atual. Consulte [COSMOS.md](COSMOS.md). O painel usa `/api` e `/auth` na própria origem; `api.proser.studio` continua atendendo os instaladores.
+
 O Worker `proser-studio-dashboard` atende dois domínios: `https://app.proser.studio` distribui o React; `https://api.proser.studio` encaminha `/api`, `/auth` e `/up` para `https://proser.wassano.com`, a rota HTTPS do Cosmos. O navegador e os instaladores usam a API pública. PostgreSQL, Redis, Appwrite e a chave privada de licenciamento permanecem no servidor externo.
 
 ## Implantado em 14/09/2026

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npm --prefix frontend run build",
     "types": "wrangler types",
-    "check": "tsc --noEmit -p worker/tsconfig.json && node --experimental-strip-types --test worker/test/*.test.ts",
+    "check": "npm run types && tsc --noEmit -p worker/tsconfig.json && node --experimental-strip-types --test worker/test/*.test.ts",
     "dev:worker": "wrangler dev",
     "deploy": "node worker/preflight.mjs && npm run build && wrangler deploy",
     "deploy:dry-run": "npm run build && wrangler deploy --dry-run"

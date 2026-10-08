@@ -25,7 +25,17 @@ Rails.application.routes.draw do
       end
       get "/audit", to: "audit#index"
     end
+    namespace :ci do
+      resources :releases, only: :create do
+        post :complete, on: :member
+        resources :uploads, controller: "release_uploads", only: %i[create update destroy] do
+          post :complete, on: :member
+        end
+      end
+    end
     namespace :v1 do
+      get "/releases", to: "releases#index"
+      get "/releases/:release_id/files/:id/:filename", to: "releases#download", constraints: { filename: /[^\/]+/ }, format: false
       post "/installations/register", to: "devices#register"
       post "/installations/heartbeat", to: "devices#heartbeat"
       post "/installations/update", to: "devices#update_check"
@@ -33,5 +43,6 @@ Rails.application.routes.draw do
       get "/updates/:release_id/files/:id/:filename", to: "updates#download", constraints: { filename: /[^\/]+/ }, format: false
     end
   end
+  get "/downloads", to: "dashboard#index"
   root "dashboard#index"
 end

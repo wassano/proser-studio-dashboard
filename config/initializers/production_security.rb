@@ -10,6 +10,8 @@ if Rails.env.production?
   raise "SECRET_KEY_BASE muito curta" if ENV.fetch("SECRET_KEY_BASE").bytesize < 64
   token = ENV["WORKER_ORIGIN_TOKEN"].to_s
   raise "WORKER_ORIGIN_TOKEN deve ter 64 caracteres hexadecimais" if token.present? && !token.match?(/\A[a-f0-9]{64}\z/)
+  ci_token = ENV["RELEASE_CI_TOKEN"].to_s
+  raise "RELEASE_CI_TOKEN deve ter 64 caracteres hexadecimais" if ci_token.present? && !ci_token.match?(/\A[a-f0-9]{64}\z/)
   key = OpenSSL::PKey.read(File.read(ENV.fetch("LICENSE_PRIVATE_KEY_PATH")))
   raise "A assinatura exige uma chave privada Ed25519" unless key.oid == "ED25519"
   key.sign(nil, "proser-boot-check")

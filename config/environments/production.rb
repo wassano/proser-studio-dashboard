@@ -5,7 +5,7 @@ Rails.application.configure do
   config.force_ssl = true
   config.assume_ssl = true # Only reachable through the TLS reverse proxy; no public Rails port.
   config.ssl_options = { hsts: { expires: 1.year, subdomains: true } }
-  config.hosts = [URI(ENV.fetch("API_URL")).host]
+  config.hosts = %w[API_URL DASHBOARD_URL].map { |name| URI(ENV.fetch(name)).host }.uniq
   config.action_dispatch.trusted_proxies = ENV.fetch("TRUSTED_PROXY_CIDRS").split(",").map { |cidr| IPAddr.new(cidr.strip) }
   config.cache_store = :redis_cache_store, { url: ENV.fetch("REDIS_URL"), namespace: "proser", error_handler: ->(**) { raise "Redis indisponível" } }
   config.secret_key_base = ENV.fetch("SECRET_KEY_BASE")

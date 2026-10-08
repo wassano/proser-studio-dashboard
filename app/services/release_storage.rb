@@ -13,12 +13,17 @@ class ReleaseStorage
         raise Policy::Denied, "Uploads permitidos apenas em rascunhos" unless release.status == "draft"
         asset.sha512 = Base64.strict_encode64(Digest::SHA512.file(file.path).digest)
         asset.sha256 = Digest::SHA256.file(file.path).hexdigest
+        if release.ci_managed?
+          expected = { "filename" => asset.filename, "size" => asset.size, "sha256" => asset.sha256 }
+          raise Policy::Denied, "Arquivo diverge do manifesto do CI" unless release.ci_expected_assets.include?(expected)
+        end
+        upload_attempted = true
         storage.upload(file, asset.filename, asset.storage_id)
         asset.save!
         yield asset if block_given?
       end
     rescue StandardError
-      storage.delete_file(asset.storage_id) rescue nil
+      storage.delete_file(asset.storage_id) rescue nil if upload_attempted
       raise
     end
     asset

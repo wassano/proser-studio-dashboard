@@ -2,7 +2,8 @@
 	encode zstd gzip
 	@devices path /api/v1/installations/*
 	@uploads path /api/admin/releases/*/upload /api/admin/releases/*/uploads/*
-	@regular not path /api/admin/releases/*/upload /api/admin/releases/*/uploads/*
+	@ci_uploads path /api/ci/releases/*/uploads/*
+	@regular not path /api/admin/releases/*/upload /api/admin/releases/*/uploads/* /api/ci/releases/*/uploads/*
 	request_body @devices {
 		max_size 16KB
 	}
@@ -11,6 +12,9 @@
 	}
 	request_body @uploads {
 		max_size 2148532224
+	}
+	request_body @ci_uploads {
+		max_size 6291456
 	}
 	forward_auth @uploads web:3000 {
 		uri /api/session

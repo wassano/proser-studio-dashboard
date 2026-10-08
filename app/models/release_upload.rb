@@ -1,13 +1,16 @@
 class ReleaseUpload < ApplicationRecord
   CHUNK_SIZE = 5.megabytes
   belongs_to :release
-  belongs_to :admin_session
+  belongs_to :admin_session, optional: true
   belongs_to :release_asset, optional: true
   validates :id, format: { with: /\A[a-f0-9]{32}\z/ }
   validates :total_bytes, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 2.gigabytes }
   validate do
     candidate = ReleaseAsset.new(release: release, filename: filename, size: total_bytes)
     errors.add(:filename, "Nome de arquivo inválido ou já enviado") unless candidate.valid?
+  end
+  validate do
+    errors.add(:base, "Proprietário de upload inválido") unless ci_upload ? admin_session_id.nil? : admin_session_id.present?
   end
   after_destroy :remove_file
   def path = Rails.root.join("tmp", "release-uploads", "#{id}.part")

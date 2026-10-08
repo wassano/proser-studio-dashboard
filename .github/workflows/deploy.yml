@@ -1,0 +1,111 @@
+name: CI e deploy do painel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: proser
+          POSTGRES_PASSWORD: proser_test
+          POSTGRES_DB: proser_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U proser -d proser_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgresql://proser:proser_test@127.0.0.1:5432/proser_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Instalar dependências Node
+        run: |
+          npm ci
+          npm --prefix frontend ci
+      - name: Testar Rails e migrations com PostgreSQL
+        run: |
+          bundle exec rails db:create db:migrate
+          bundle exec rails test
+      - name: Testar deploy, gateway e frontend
+        run: |
+          bash -n bin/deploy
+          node --test scripts/test-deploy.mjs
+          npm run check
+          npm --prefix frontend run test:unit
+          npm --prefix frontend run build
+      - name: Testar interface no Chromium
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: production
+      url: https://app.proser.studio
+    concurrency:
+      group: proser-dashboard-production
+      cancel-in-progress: false
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST || '157.173.111.33' }}
+      SSH_USER: ${{ secrets.SSH_USER || 'deploy' }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      PROJECT_PATH: ${{ secrets.PROJECT_PATH || '/home/deploy/proser-studio-dashboard' }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enviar o commit validado e atualizar o painel por SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${SSH_PRIVATE_KEY:?Configure SSH_PRIVATE_KEY como no Report7}"
+          : "${SSH_KNOWN_HOSTS:?Configure SSH_KNOWN_HOSTS com a chave verificada do servidor}"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]]
+          [[ "$PROJECT_PATH" =~ ^/[a-zA-Z0-9_/-]+$ && "$PROJECT_PATH" != / ]]
+          [[ "$PROJECT_PATH" != *'/../'* && "$PROJECT_PATH" != */.. ]]
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          unset SSH_PRIVATE_KEY SSH_KNOWN_HOSTS
+          ssh_options=(-i "$ssh_dir/key" -p "$SSH_PORT" -o BatchMode=yes
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=30
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+          release="$PROJECT_PATH/.deploy/releases/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git archive --format=tar "$GITHUB_SHA" | gzip | ssh "${ssh_options[@]}" "$SSH_USER@$SSH_HOST" \
+            "set -eu; umask 077; test -d '$PROJECT_PATH'; mkdir -p '$release'; tar -xzf - -C '$release'"
+          ssh "${ssh_options[@]}" "$SSH_USER@$SSH_HOST" \
+            "bash '$release/bin/deploy' '$PROJECT_PATH' '$GITHUB_SHA'"
+          printf 'Deploy concluído: `%s` em https://app.proser.studio\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

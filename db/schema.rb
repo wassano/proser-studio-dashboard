@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_08_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -112,7 +112,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_000100) do
   end
 
   create_table "release_uploads", id: :string, force: :cascade do |t|
-    t.integer "admin_session_id", null: false
+    t.integer "admin_session_id"
+    t.boolean "ci_upload", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "expires_at", null: false
     t.string "filename", null: false
@@ -129,6 +130,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_000100) do
 
   create_table "releases", force: :cascade do |t|
     t.string "channel", default: "stable", null: false
+    t.json "ci_expected_assets", default: [], null: false
+    t.boolean "ci_ready", default: false, null: false
+    t.string "ci_run_url"
     t.datetime "created_at", null: false
     t.text "notes", default: "", null: false
     t.datetime "published_at"
