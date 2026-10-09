@@ -1,6 +1,8 @@
 Rails.application.configure do
   config.enable_reloading = false
   config.eager_load = true
+  # The production image is read-only; migrations update the database only.
+  config.active_record.dump_schema_after_migration = false
   config.consider_all_requests_local = false
   config.force_ssl = true
   config.assume_ssl = true # Only reachable through the TLS reverse proxy; no public Rails port.
