@@ -8,6 +8,7 @@ import test from 'node:test';
 
 const revision = 'a'.repeat(40);
 const deployScript = fileURLToPath(new URL('../bin/deploy', import.meta.url));
+const composeCli = spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' });
 
 function runDeploy(failure = '') {
   const project = realpathSync(mkdtempSync(join(tmpdir(), 'proser-deploy-')));
@@ -79,6 +80,25 @@ test('deploy builds the exact snapshot, backs up, migrates and replaces only web
     assert.equal(readFileSync(join(run.project, 'secrets/license-private.pem'), 'utf8'), 'existing-private-key');
     assert.equal(readlinkSync(join(run.project, '.deploy/current')), 'releases/new');
     assert.equal(readFileSync(join(run.project, '.deploy/revision'), 'utf8').trim(), revision);
+  } finally { run.clean(); }
+});
+
+test('migration options are accepted by the real Docker Compose CLI', {
+  skip: composeCli.status !== 0 && !process.env.CI ? 'Docker Compose CLI unavailable' : false,
+}, () => {
+  assert.equal(composeCli.status, 0, 'Docker Compose CLI is required for deploy validation in CI');
+  const run = runDeploy();
+  try {
+    assert.equal(run.result.status, 0, run.result.stderr);
+    const migration = run.commands.find(args => args.includes('db:migrate'));
+    assert.ok(migration, 'Migration command was not executed');
+    const options = migration.slice(migration.indexOf('run') + 1, migration.indexOf('web'));
+    assert.ok(options.includes('--rm'));
+    assert.ok(options.includes('--no-deps'), 'Migrations must not restart database or Redis');
+    // --help checks the real CLI parser without connecting to a daemon or
+    // starting containers. The command mock alone accepts unsupported flags.
+    const parsed = spawnSync('docker', ['compose', 'run', ...options, '--help'], { encoding: 'utf8' });
+    assert.equal(parsed.status, 0, parsed.stderr);
   } finally { run.clean(); }
 });
 

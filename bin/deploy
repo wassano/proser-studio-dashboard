@@ -48,7 +48,8 @@ echo 'Fazendo backup do PostgreSQL antes das migrations'
 test -s "$backup"
 
 echo 'Aplicando migrations com a nova imagem'
-"${compose[@]}" run --rm --no-deps --no-build web bundle exec rails db:migrate
+# run reuses the image built above; --no-build is supported by up, not run.
+"${compose[@]}" run --rm --no-deps web bundle exec rails db:migrate
 
 restore_web() {
   echo 'Deploy falhou; restaurando a imagem anterior do painel' >&2

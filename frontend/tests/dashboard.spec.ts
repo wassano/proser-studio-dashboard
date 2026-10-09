@@ -93,5 +93,5 @@ test('uploads installers in bounded chunks before completion', async ({ page }) 
   await page.getByRole('button', { name: 'Criar rascunho' }).click();
   const buffer = Buffer.alloc(5 * 1024 * 1024 + 17, 0x41); buffer.write('MZ');
   await page.locator('input[type=file]').setInputFiles({ name: 'Proser.exe', mimeType: 'application/octet-stream', buffer });
-  await expect(page.getByRole('status')).toContainText('Instalador enviado e verificado');
+  await expect(page.getByRole('status').filter({ hasText: 'Instalador enviado e verificado' })).toBeVisible();
 });
