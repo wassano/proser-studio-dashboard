@@ -10,7 +10,7 @@ const revision = 'a'.repeat(40);
 const deployScript = fileURLToPath(new URL('../bin/deploy', import.meta.url));
 const composeCli = spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' });
 
-function runDeploy(failure = '') {
+function runDeploy(failure = '', probeMode = 'local', verdict = '') {
   const project = realpathSync(mkdtempSync(join(tmpdir(), 'proser-deploy-')));
   const release = join(project, '.deploy/releases/new');
   const old = join(project, '.deploy/releases/old');
@@ -52,7 +52,8 @@ if (args[0] === 'inspect') {
   writeFileSync(join(mockBin, 'flock'), '#!/bin/sh\n[ "$DEPLOY_TEST_FAILURE" != lock ]\n', { mode: 0o755 });
   // The production server uses GNU mv; emulate its atomic -T rename on macOS.
   writeFileSync(join(mockBin, 'mv'), `#!${process.execPath}\nimport { renameSync } from 'node:fs';\nrenameSync(process.argv.at(-2), process.argv.at(-1));\n`, { mode: 0o755 });
-  const result = spawnSync('bash', [join(release, 'bin/deploy'), project, revision], {
+  const result = spawnSync('bash', [join(release, 'bin/deploy'), project, revision, probeMode], {
+    input: verdict,
     env: { ...process.env, PATH: `${mockBin}:${process.env.PATH}`, DEPLOY_TEST_LOG: log, DEPLOY_TEST_FAILURE: failure },
     encoding: 'utf8',
   });
@@ -136,6 +137,28 @@ for (const failure of ['health', 'public']) {
       assert.equal(readlinkSync(join(run.project, '.deploy/current')), 'releases/old');
       assert.equal(existsSync(join(run.project, '.deploy/revision')), false);
       assert.ok(run.commands.every(args => !args.includes('db:rollback') && !args.includes('down')));
+    } finally { run.clean(); }
+  });
+}
+
+test('external public checks must approve the exact revision before finalizing', () => {
+  const run = runDeploy('', 'external', `PROSER_PUBLIC_HEALTH_OK ${revision}\n`);
+  try {
+    assert.equal(run.result.status, 0, run.result.stderr);
+    assert.match(run.result.stdout, new RegExp(`PROSER_PUBLIC_HEALTH_READY ${revision}`));
+    assert.equal(readFileSync(join(run.project, '.deploy/revision'), 'utf8').trim(), revision);
+    assert.ok(run.commands.every(args => args[0] !== 'exec'), 'Public checks belong to the external runner');
+  } finally { run.clean(); }
+});
+
+for (const verdict of ['', `PROSER_PUBLIC_HEALTH_FAILED ${revision}\n`, `PROSER_PUBLIC_HEALTH_OK ${'b'.repeat(40)}\n`]) {
+  test(`missing, failed or mismatched external result restores web: ${verdict.trim() || 'EOF'}`, () => {
+    const run = runDeploy('', 'external', verdict);
+    try {
+      assert.notEqual(run.result.status, 0);
+      assert.ok(run.commands.some(args => args.includes('up') && args.some(arg => arg.endsWith('compose.rollback.yml'))));
+      assert.equal(readlinkSync(join(run.project, '.deploy/current')), 'releases/old');
+      assert.equal(existsSync(join(run.project, '.deploy/revision')), false);
     } finally { run.clean(); }
   });
 }
