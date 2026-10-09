@@ -13,3 +13,6 @@
 .login-download:hover { background: #2e2540; border-color: #8e72b2; }
 .login-download svg { flex-shrink: 0; }
 .release-loading { padding: 24px; color: var(--muted); }
+
+.asset-download { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #373942; border-radius: 7px; background: #24262d; padding: 7px 10px; color: #e8e9ed; font-size: .8rem; font-weight: 550; white-space: nowrap; }
+.asset-download:hover { background: #30323b; border-color: #606373; }

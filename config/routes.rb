@@ -7,6 +7,7 @@ Rails.application.routes.draw do
   delete "/api/session", to: "sessions#destroy"
   namespace :api do
     namespace :admin do
+      get "/releases/:release_id/files/:id/:filename", to: "releases#download", constraints: { filename: /[^\/]+/ }, format: false
       resource :settings, only: %i[show update]
       resources :plans, only: %i[index create update]
       resources :licenses, only: %i[index create update]

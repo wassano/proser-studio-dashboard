@@ -155,3 +155,32 @@ test('pending release requests show loading instead of an empty catalog', async 
   finish();
   await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toBeVisible();
 });
+
+
+test('administrators can download draft installers and update packages before publication', async ({ page }) => {
+  const { releases } = await fixture(page);
+  releases.push({ id: 10, version: '1.21.5', target: 'mac-arm64', channel: 'stable', status: 'draft', published_at: null,
+    ci_run_url: 'https://github.com/wassano/proser-studio-desktop/actions/runs/37952390051', ci_ready: true,
+    release_assets: ['dmg', 'zip'].map((extension, index) => ({ id: index + 20, filename: `Proser studio 1.21.5.${extension}`, size: 1024, sha256: 'a'.repeat(64) })),
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Versões', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toBeVisible();
+  for (const [index, extension] of ['dmg', 'zip'].entries()) {
+    const filename = `Proser studio 1.21.5.${extension}`;
+    const downloadPath = `/api/admin/releases/10/files/${index + 20}/${encodeURIComponent(filename)}`;
+    const downloadLink = page.getByRole('link', { name: `Baixar ${filename}`, exact: true });
+    await expect(downloadLink).toHaveAttribute('href', downloadPath);
+    await page.route(`**${downloadPath}`, route => route.fulfill({ body: `verified-${extension}`, contentType: 'application/octet-stream', headers: { 'Content-Disposition': `attachment; filename="Proser.${extension}"` } }));
+    const downloaded = page.waitForEvent('download');
+    await downloadLink.click();
+    expect((await downloaded).suggestedFilename()).toBe(`Proser.${extension}`);
+  }
+  await expect(page.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Copiar link público', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/admin-draft-downloads-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/admin-draft-downloads-mobile.png', fullPage: true });
+});
