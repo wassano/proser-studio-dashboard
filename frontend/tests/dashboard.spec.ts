@@ -15,7 +15,7 @@ async function fixture(page: Page) {
     else if (url.pathname === '/api/admin/installations') result = { items: [device], total: 1, page: 1 };
     else if (url.pathname === '/api/admin/installations/1') { Object.assign(device, { status: 'revoked', access_status: 'revoked' }); result = device; }
     else if (url.pathname.startsWith('/api/admin/licenses')) { if (method === 'PATCH') Object.assign(license, route.request().postDataJSON().license); result = { items: [license], total: 1, page: 1 }; }
-    else if (url.pathname === '/api/admin/releases') { if (method === 'POST') releases.push({ id: 1, ...route.request().postDataJSON().release, status: 'draft', release_assets: [] }); result = { items: releases, total: releases.length, page: 1 }; }
+    else if (url.pathname === '/api/admin/releases') { if (method === 'POST') releases.push({ id: 1, ...route.request().postDataJSON().release, status: 'draft', release_assets: [] }); result = { items: releases, total: new Set(releases.map(item => item.version)).size, page: 1 }; }
     if (!['GET'].includes(method)) expect(route.request().headers()['x-csrf-token']).toBe('test-csrf');
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(result) });
   });
@@ -130,13 +130,14 @@ test('CI drafts arriving after the page opens refresh automatically and still re
     release_assets: [{ id: index + 20, filename: `Proser-${target}.${target.startsWith('mac-') ? 'dmg' : 'exe'}`, size: 1024, sha256: 'a'.repeat(64) }],
   })));
   await page.clock.fastForward(30000);
-  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toHaveCount(4);
+  await expect(page.getByRole('heading', { name: '1.21.5', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Versão 1.21.5', exact: true }).locator('.badge.draft')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toHaveCount(0);
   for (const button of await page.getByRole('button', { name: 'Publicar', exact: true }).all()) await expect(button).toBeEnabled();
   releases[0].status = 'published';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('heading', { name: '1.21.5 Publicada', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toHaveCount(3);
+  await expect(page.getByRole('region', { name: 'Versão 1.21.5', exact: true }).locator('.badge.published')).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Versão 1.21.5', exact: true }).locator('.badge.draft')).toHaveCount(3);
   expect(publications).toEqual([]);
 });
 
@@ -165,7 +166,8 @@ test('administrators can download draft installers and update packages before pu
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Versões', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '1.21.5', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Versão 1.21.5', exact: true }).locator('.badge.draft')).toHaveCount(1);
   for (const [index, extension] of ['dmg', 'zip'].entries()) {
     const filename = `Proser studio 1.21.5.${extension}`;
     const downloadPath = `/api/admin/releases/10/files/${index + 20}/${encodeURIComponent(filename)}`;
@@ -178,9 +180,48 @@ test('administrators can download draft installers and update packages before pu
   }
   await expect(page.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Copiar link público', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '1.21.5', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Versão 1.21.5', exact: true }).locator('.badge.draft')).toHaveCount(1);
   await page.screenshot({ path: 'test-results/admin-draft-downloads-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/admin-draft-downloads-mobile.png', fullPage: true });
+});
+
+
+test('groups operating systems under one version while preserving platform status and actions', async ({ page }) => {
+  const { releases } = await fixture(page);
+  const targets = ['win-x64', 'win7-x64', 'mac-arm64', 'mac-x64'];
+  releases.push(...targets.map((target, index) => ({
+    id: index + 10, version: '1.21.5', target, channel: 'stable', status: index === 0 ? 'published' : index === 3 ? 'withdrawn' : 'draft',
+    published_at: index === 0 || index === 3 ? '2026-10-09T17:00:00Z' : null,
+    ci_run_url: 'https://github.com/wassano/proser-studio-desktop/actions/runs/37952390051', ci_ready: index !== 1,
+    release_assets: (target.startsWith('mac-') ? ['dmg', 'zip'] : ['exe']).map((extension, assetIndex) => ({
+      id: index * 2 + assetIndex + 20, filename: `Proser-${target}.${extension}`, size: 104857600, sha256: 'a'.repeat(64),
+    })),
+  })));
+  releases.push({ id: 15, version: '1.21.5', target: 'win-x64', channel: 'beta', status: 'draft', published_at: null, release_assets: [] });
+  releases.push(...['1.9.0', '1.10.0'].map((version, index) => ({ id: index + 16, version, target: 'win-x64', channel: 'stable', status: 'draft', published_at: null, release_assets: [] })));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Versões', exact: true }).click();
+  const group = page.getByRole('region', { name: 'Versão 1.21.5', exact: true });
+  await expect(group.getByRole('heading', { name: '1.21.5', exact: true })).toHaveCount(1);
+  await expect(group.getByRole('article')).toHaveCount(5);
+  await expect(group.getByText('4 plataformas · 6 arquivos', { exact: true })).toBeVisible();
+  await expect(page.locator('.release-group-heading h3')).toHaveText(['1.21.5', '1.10.0', '1.9.0']);
+  const windows = group.getByRole('article', { name: 'Windows 10/11 · x64 · Estável', exact: true });
+  await expect(windows.getByRole('button', { name: 'Retirar', exact: true })).toBeEnabled();
+  await expect(windows.getByRole('button', { name: 'Copiar link público', exact: true })).toBeVisible();
+  await expect(group.getByRole('article', { name: 'Windows 7 SP1 · x64 · Estável', exact: true }).getByRole('button', { name: 'Publicar', exact: true })).toBeDisabled();
+  const mac = group.getByRole('article', { name: 'macOS · Apple Silicon · Estável', exact: true });
+  await expect(mac.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
+  await expect(mac.getByRole('link', { name: 'Baixar Proser-mac-arm64.dmg', exact: true })).toHaveAttribute('href', '/api/admin/releases/12/files/24/Proser-mac-arm64.dmg');
+  const publication = page.waitForRequest(request => request.url().endsWith('/api/admin/releases/12/publish') && request.method() === 'POST');
+  await mac.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await publication;
+  await expect(group.getByRole('article', { name: 'Windows 10/11 · x64 · Beta', exact: true }).getByRole('button', { name: 'Publicar', exact: true })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/grouped-releases-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/grouped-releases-mobile.png', fullPage: true });
 });

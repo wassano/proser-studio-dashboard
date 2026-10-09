@@ -16,3 +16,11 @@
 
 .asset-download { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #373942; border-radius: 7px; background: #24262d; padding: 7px 10px; color: #e8e9ed; font-size: .8rem; font-weight: 550; white-space: nowrap; }
 .asset-download:hover { background: #30323b; border-color: #606373; }
+
+.release-group + .release-group { border-top: 1px solid var(--border); }
+.release-group-heading { display: flex; align-items: center; gap: 14px; padding: 24px; background: #202029; border-bottom: 1px solid var(--border); }
+.release-group-heading h3 { font-size: 1.2rem; }
+.release-group-heading p { margin-top: 7px; color: var(--muted); font-size: .8rem; }
+.release-group .release:last-child { border-bottom: 0; }
+.release h4 { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0; font-size: .95rem; font-weight: 550; }
+@media(max-width:800px) { .release-group-heading, .release { padding: 20px 16px; } }

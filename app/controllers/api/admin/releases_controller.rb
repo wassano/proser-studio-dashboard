@@ -1,8 +1,11 @@
 module Api::Admin
   class ReleasesController < BaseController
     def index
-      scope = Release.includes(:release_assets).order(id: :desc)
-      render json: { items: collection(scope).as_json(include: :release_assets), total: scope.count, page: page }
+      versions = Release.distinct.pluck(:version).sort_by { |version| Gem::Version.new(version) }.reverse
+      selected = versions.slice((page - 1) * 100, 100) || []
+      groups = Release.includes(:release_assets).where(version: selected).order(id: :desc).to_a.group_by(&:version)
+      items = selected.flat_map { |version| groups.fetch(version, []) }
+      render json: { items: items.as_json(include: :release_assets), total: versions.size, page: page }
     end
     def create
       release = Release.new(params.require(:release).permit(:version, :target, :channel, :notes))
