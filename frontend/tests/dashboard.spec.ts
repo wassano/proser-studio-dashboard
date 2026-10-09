@@ -19,6 +19,7 @@ async function fixture(page: Page) {
     if (!['GET'].includes(method)) expect(route.request().headers()['x-csrf-token']).toBe('test-csrf');
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(result) });
   });
+  return { releases };
 }
 test('unauthenticated dashboard offers Google only', async ({ page }) => {
   await page.route('**/api/session', route => route.fulfill({ status: 401, json: { error: 'Entre com Google' } }));
@@ -94,4 +95,63 @@ test('uploads installers in bounded chunks before completion', async ({ page }) 
   const buffer = Buffer.alloc(5 * 1024 * 1024 + 17, 0x41); buffer.write('MZ');
   await page.locator('input[type=file]').setInputFiles({ name: 'Proser.exe', mimeType: 'application/octet-stream', buffer });
   await expect(page.getByRole('status').filter({ hasText: 'Instalador enviado e verificado' })).toBeVisible();
+});
+
+
+test('login download stays below the access notice at desktop and mobile widths', async ({ page }) => {
+  await page.route('**/api/session', route => route.fulfill({ status: 401, json: { error: 'Entre com Google' } }));
+  await page.goto('/');
+  const download = page.getByRole('link', { name: 'Baixar o Proser studio', exact: true });
+  await expect(download).toHaveAttribute('href', '/downloads');
+  for (const width of [1440, 679, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const noticeBox = await page.getByText('Acesso exclusivo aos administradores autorizados.', { exact: true }).boundingBox();
+    const downloadBox = await download.boundingBox();
+    expect(downloadBox!.y).toBeGreaterThanOrEqual(noticeBox!.y + noticeBox!.height + 20);
+    expect(downloadBox!.height).toBeGreaterThanOrEqual(44);
+    expect(await download.evaluate(element => element.getClientRects().length)).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/login-download-${width}.png`, fullPage: true });
+  }
+});
+
+test('CI drafts arriving after the page opens refresh automatically and still require manual publication', async ({ page }) => {
+  await page.clock.install();
+  const { releases } = await fixture(page);
+  const publications: string[] = [];
+  page.on('request', request => { if (request.url().endsWith('/publish')) publications.push(request.url()); });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Versões', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toBeVisible();
+  const targets = ['win-x64', 'win7-x64', 'mac-arm64', 'mac-x64'];
+  releases.push(...targets.map((target, index) => ({
+    id: index + 10, version: '1.21.5', target, channel: 'stable', status: 'draft', published_at: null,
+    ci_run_url: 'https://github.com/wassano/proser-studio-desktop/actions/runs/37952390051', ci_ready: true,
+    release_assets: [{ id: index + 20, filename: `Proser-${target}.${target.startsWith('mac-') ? 'dmg' : 'exe'}`, size: 1024, sha256: 'a'.repeat(64) }],
+  })));
+  await page.clock.fastForward(30000);
+  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toHaveCount(4);
+  await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toHaveCount(0);
+  for (const button of await page.getByRole('button', { name: 'Publicar', exact: true }).all()) await expect(button).toBeEnabled();
+  releases[0].status = 'published';
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('heading', { name: '1.21.5 Publicada', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: '1.21.5 Rascunho', exact: true })).toHaveCount(3);
+  expect(publications).toEqual([]);
+});
+
+test('pending release requests show loading instead of an empty catalog', async ({ page }) => {
+  await fixture(page);
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  await page.route('**/api/admin/releases?**', async route => {
+    await pending;
+    await route.fulfill({ json: { items: [], total: 0, page: 1 } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Versões', exact: true }).click();
+  await expect(page.getByRole('status', { name: '' }).filter({ hasText: 'Carregando versões…' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toHaveCount(0);
+  finish();
+  await expect(page.getByRole('heading', { name: 'A primeira versão começa aqui' })).toBeVisible();
 });

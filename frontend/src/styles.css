@@ -7,3 +7,9 @@
 .public-assets small { display: block; margin-top: 8px; overflow-wrap: anywhere; }
 .public-assets details { margin-top: 8px; }
 .public-assets code { overflow-wrap: anywhere; }
+
+.login-access-note { display: block; text-align: center; line-height: 1.6; }
+.login-download { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; margin-top: 24px; padding: 12px 16px; border: 1px solid #584270; border-radius: 7px; color: #d0b9ff; font-size: .9rem; font-weight: 550; }
+.login-download:hover { background: #2e2540; border-color: #8e72b2; }
+.login-download svg { flex-shrink: 0; }
+.release-loading { padding: 24px; color: var(--muted); }
