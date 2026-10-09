@@ -68,16 +68,16 @@ if ! "${compose[@]}" up -d --no-deps --no-build --wait --wait-timeout 180 web; t
   exit 1
 fi
 
-# Verifica também as rotas públicas que precisam atravessar o Cosmos com TLS.
-if ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://app.proser.studio/up >/dev/null ||
-   ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://api.proser.studio/up >/dev/null ||
-   ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://app.proser.studio/api/v1/releases >/dev/null; then
-  restore_web
-  exit 1
-fi
+# Identifica a sonda para o proxy público, que pode rejeitar o curl genérico.
+for endpoint in https://app.proser.studio/up https://api.proser.studio/up \
+  https://app.proser.studio/api/v1/releases; do
+  echo "Verificando HTTPS: $endpoint"
+  if ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
+    --user-agent 'Proser-Deploy-Healthcheck/1.0' "$endpoint" >/dev/null; then
+    restore_web
+    exit 1
+  fi
+done
 
 ln -sfn "releases/$(basename "$release")" "$project/.deploy/current.next"
 mv -Tf "$project/.deploy/current.next" "$project/.deploy/current"

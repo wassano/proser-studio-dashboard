@@ -76,6 +76,14 @@ test('deploy builds the exact snapshot, backs up, migrates and replaces only web
     assert.ok(commands[update].includes('--wait'));
     assert.equal(commands[update].at(-1), 'web');
     assert.ok(commands.every(args => !args.includes('down') && !args.includes('prune')));
+    const probes = commands.filter(args => args[0] === 'exec');
+    assert.deepEqual(probes.map(args => args.at(-1)), [
+      'https://app.proser.studio/up', 'https://api.proser.studio/up', 'https://app.proser.studio/api/v1/releases',
+    ]);
+    for (const probe of probes) {
+      assert.equal(probe[probe.indexOf('--user-agent') + 1], 'Proser-Deploy-Healthcheck/1.0');
+      assert.ok(!probe.includes('-k') && !probe.includes('--insecure'), 'HTTPS probes must validate TLS');
+    }
     assert.equal(readFileSync(join(run.project, '.env'), 'utf8'), 'PRESERVE=existing\n');
     assert.equal(readFileSync(join(run.project, 'secrets/license-private.pem'), 'utf8'), 'existing-private-key');
     assert.equal(readlinkSync(join(run.project, '.deploy/current')), 'releases/new');
