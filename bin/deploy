@@ -5,6 +5,8 @@ umask 077
 
 project=${1:?Informe o diretório de produção}
 revision=${2:?Informe o SHA do commit}
+probe_mode=${3:-local}
+[[ "$probe_mode" == local || "$probe_mode" == external ]] || { echo 'Modo de verificação inválido' >&2; exit 1; }
 [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || { echo 'SHA inválido' >&2; exit 1; }
 project=$(cd "$project" && pwd -P)
 release=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -68,15 +70,27 @@ if ! "${compose[@]}" up -d --no-deps --no-build --wait --wait-timeout 180 web; t
   exit 1
 fi
 
-# Verifica também as rotas públicas que precisam atravessar o Cosmos com TLS.
-if ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://app.proser.studio/up >/dev/null ||
-   ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://api.proser.studio/up >/dev/null ||
-   ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
-  https://app.proser.studio/api/v1/releases >/dev/null; then
-  restore_web
-  exit 1
+# O CI consulta as rotas públicas de fora do servidor. O lock e o rollback
+# permanecem neste processo até receber o resultado pelo canal SSH autenticado.
+if [[ "$probe_mode" == external ]]; then
+  trap 'restore_web; exit 1' HUP TERM
+  echo "PROSER_PUBLIC_HEALTH_READY $revision"
+  verdict=''
+  if ! IFS= read -r -t 180 verdict || [[ "$verdict" != "PROSER_PUBLIC_HEALTH_OK $revision" ]]; then
+    restore_web
+    exit 1
+  fi
+  trap - HUP TERM
+else
+  for endpoint in https://app.proser.studio/up https://api.proser.studio/up \
+    https://app.proser.studio/api/v1/releases; do
+    echo "Verificando HTTPS: $endpoint"
+    if ! docker exec proser-studio-dashboard curl -fsS --max-time 30 --retry 3 --retry-delay 2 \
+      --user-agent 'Proser-Deploy-Healthcheck/1.0' "$endpoint" >/dev/null; then
+      restore_web
+      exit 1
+    fi
+  done
 fi
 
 ln -sfn "releases/$(basename "$release")" "$project/.deploy/current.next"
