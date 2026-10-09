@@ -5,7 +5,7 @@ module Api::V1
       latest = releases.group_by(&:target).values.map { |items| items.max_by { |item| Gem::Version.new(item.version) } }
       render json: { items: latest.sort_by(&:target).map { |item| {
         id: item.id, version: item.version, target: item.target, notes: item.notes, published_at: item.published_at,
-        assets: item.release_assets.select { |a| %w[.exe .dmg .zip].include?(File.extname(a.filename)) }.map { |a| {
+        assets: item.release_assets.select { |a| File.extname(a.filename) == (item.target.start_with?("mac-") ? ".dmg" : ".exe") }.map { |a| {
           id: a.id, filename: a.filename, size: a.size, sha256: a.sha256,
           download_path: "/api/v1/releases/#{item.id}/files/#{a.id}/#{ERB::Util.url_encode(a.filename)}"
         } }

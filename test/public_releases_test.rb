@@ -39,4 +39,22 @@ class PublicReleasesTest < ActionDispatch::IntegrationTest
     get "/api/v1/releases/#{draft.id}/files/#{draft.release_assets.sole.id}/Proser.exe"
     assert_response :not_found
   end
+  test "public macOS downloads expose the DMG directly while the update manifest uses the ZIP" do
+    item = Release.create!(version: "1.22.0", target: "mac-arm64", channel: "stable")
+    assets = %w[dmg zip].map do |ext|
+      bytes = "mac-#{ext}-content"
+      item.release_assets.create!(filename: "Proser.#{ext}", size: bytes.bytesize, storage_id: SecureRandom.uuid, sha256: Digest::SHA256.hexdigest(bytes), sha512: Base64.strict_encode64(Digest::SHA512.digest(bytes)))
+    end
+    item.publish!
+    get "/api/v1/releases"
+    assert_response :success
+    downloads = response.parsed_body.dig("items", 0, "assets")
+    assert_equal ["Proser.dmg"], downloads.map { |asset| asset.fetch("filename") }
+    assert_match(/Proser.zip\z/, item.manifest.fetch(:files).sole.fetch(:url))
+    stub_request(:get, "https://appwrite.example.test/v1/storage/buckets/releases/files/#{assets.first.storage_id}/download").to_return(status: 200, body: "mac-dmg-content")
+    get downloads.sole.fetch("download_path")
+    assert_response :success
+    assert_equal "mac-dmg-content", response.body
+    assert_match(/Proser.dmg/, response.headers["Content-Disposition"])
+  end
 end
