@@ -12,6 +12,7 @@ module Api::Ci
       end
       raise Policy::Denied, "Arquivos duplicados" unless assets.map { |a| a["filename"] }.uniq.size == assets.size
       required = input["target"].to_s.start_with?("mac-") ? %w[.dmg .zip] : %w[.exe]
+      raise Policy::Denied, "Envie somente instaladores e pacotes de atualização" unless assets.size == required.size
       raise Policy::Denied, "Instaladores obrigatórios ausentes ou duplicados" unless required.all? { |ext| assets.count { |a| File.extname(a["filename"]) == ext } == 1 }
       raise Policy::Denied, "Origem do CI inválida" unless input["ci_run_url"].to_s.match?(%r{\Ahttps://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+\z})
       release = nil

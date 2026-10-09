@@ -91,4 +91,13 @@ class CiReleasesTest < ActionDispatch::IntegrationTest
     post "/api/ci/releases", params: body.to_json, headers: ci_headers
     assert_response :success
   end
+  test "CI refuses blockmaps and unrelated files alongside the required installer" do
+    %w[Proser.exe.blockmap Proser.zip Proser.dmg].each do |filename|
+      body = input
+      body[:release][:assets] << { filename: filename, size: 12, sha256: "c" * 64 }
+      post "/api/ci/releases", params: body.to_json, headers: ci_headers
+      assert_response :unprocessable_entity
+    end
+    assert_equal 0, Release.count
+  end
 end
